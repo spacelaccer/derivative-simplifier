@@ -33,11 +33,67 @@ def help_callback(parser, *args, **kwargs):
         print(command.description)
 
 
+def make_linearfits_callback(parser, *args, **kwargs):
+    """
+    Move derivative needed linearfits to directory @linearfits for making derivative,
+    because linearfits are not used frequently, they are moved to @linearfits for storing.
+    """
+    # We have nowhere to find the target linearfits
+    if not hasattr(parser, 'src_linearfits') and 'src' not in kwargs:
+        return
+
+    source = ''
+    if 'src' in kwargs:
+        source = kwargs['src']
+    else:
+        source = parser.src_linearfits
+    if not os.path.isdir(source):
+        print("Fatal Error: %s: not directory" % source)
+        return
+
+    base = os.path.join(parser.root, parser.linearfits)
+    if not args:
+        for filename in os.listdir(source):
+            if re.match(parser.lin_pattern, filename):
+                print("Moving linearfit:   %s    ....    " % filename[:20], end='')
+                try:
+                    shutil.move(os.path.join(source, filename), base)
+                except (IOError, OSError) as e:
+                    print("Failure")
+                    continue
+                print("Success")
+        return
+
+    serial_numbers = utility.parse_serial_numbers(*args)
+    for linearfit in os.listdir(source):
+        solution = re.match(parser.lfit_pattern, linearfit)
+        if solution:
+            serial = solution.group('serial_number')
+            if serial in serial_numbers:
+                print("Moving linearfit:   %s    ....    " % linearfit[:20], end='')
+                try:
+                    shutil.move(os.path.join(source, linearfit), base)
+                except (OSError, IOError) as e:
+                    print("Failure")
+                    continue
+                print("Success")
+                serial_numbers.remove(serial)
+
+    # Check whether there are any serials left
+    if serial_numbers:
+        for serial in serial_numbers:
+            linearfit = "ZCF-301B ST" + serial + "流量系数"
+            print("Moving linearfit:   %s    ....    " % linearfit, end='')
+            print("Missing")
+
+
 def make_calibrates_callback(parser, *args, **kwargs):
     """
     Copy derivative needed calibrates to directory @calibrates for making derivative,
-    source calibrates resides somewhere outside our root directory, its path is recorded
-    in @config.cfg, and has been read by @parser, if it is not recorded, nothing will be done.
+    source calibrates always reside somewhere outside our root directory but within
+    a software's secondary directory, and they are frequently needed, so they will just
+    be copied, not moved. The path is recorded in @config.cfg, and has been read by @parser,
+    if it is not recorded, nothing will be done.
     """
     # we do not know where to find the source calibrates
     if not hasattr(parser, 'src_calibrates') and 'src' not in kwargs:
@@ -48,7 +104,7 @@ def make_calibrates_callback(parser, *args, **kwargs):
         source = kwargs['src']
     else:
         source = parser.src_calibrates
-    if os.path.isdir(source):
+    if not os.path.isdir(source):
         print("Fatal Error: %s: not directory" % source)
         return
 
@@ -57,7 +113,7 @@ def make_calibrates_callback(parser, *args, **kwargs):
     # If no serial numbers specified, just copy them all
     if not args:
         for filename in os.listdir(source):
-            if re.match(r'\d{3,5}[.][p|f]Cal', filename):
+            if re.match(parser.cal_pattern, filename):
                 print("Copying calibrate:   %s    ....    " % filename, end='')
                 try:
                     shutil.copy(os.path.join(source, filename), base)
