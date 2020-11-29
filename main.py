@@ -9,6 +9,7 @@ command_prompt = ">>> "
 if __name__ == '__main__':
 
     parser = CommandElementParser()
+    parser.parse_config()
     parser.append_element('exit',
                           callback=callback.exit_callback,
                           description='Just exit')
@@ -18,6 +19,9 @@ if __name__ == '__main__':
     parser.append_element('help',
                           callback=callback.help_callback,
                           description='Show useful information')
+    parser.append_element('make-calibrates', 'makeclr',
+                          callback=callback.make_calibrates_callback,
+                          description='Copy calibrates to storage location designated')
     parser.append_element('make-derivative', 'makeder',
                           callback=callback.make_derivative_callback,
                           description='Make derivative package')

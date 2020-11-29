@@ -4,6 +4,8 @@ import sys
 import shutil
 import datetime
 
+import utility
+
 
 def exit_callback(parser, *args, **kwargs):
     """
@@ -31,30 +33,79 @@ def help_callback(parser, *args, **kwargs):
         print(command.description)
 
 
+def make_calibrates_callback(parser, *args, **kwargs):
+    """
+    Copy derivative needed calibrates to directory @calibrates for making derivative,
+    source calibrates resides somewhere outside our root directory, its path is recorded
+    in @config.cfg, and has been read by @parser, if it is not recorded, nothing will be done.
+    """
+    # we do not know where to find the source calibrates
+    if not hasattr(parser, 'src_calibrates') and 'src' not in kwargs:
+        return
+
+    source = ''
+    if 'src' in kwargs:
+        source = kwargs['src']
+    else:
+        source = parser.src_calibrates
+    if os.path.isdir(source):
+        print("Fatal Error: %s: not directory" % source)
+        return
+
+    # Location where we copy source calibrates to
+    base = os.path.join(parser.root, parser.calibrates)
+    # If no serial numbers specified, just copy them all
+    if not args:
+        for filename in os.listdir(source):
+            if re.match(r'\d{3,5}[.][p|f]Cal', filename):
+                print("Copying calibrate:   %s    ....    " % filename, end='')
+                try:
+                    shutil.copy(os.path.join(source, filename), base)
+                except (IOError, OSError) as e:
+                    print("Failure")
+                    continue
+                print("Success")
+        return
+
+    # Serial numbers specified
+    serial_numbers = utility.parse_serial_numbers(*args)
+    calibrates = os.listdir(source)
+    candidates = []
+    # Create list contains all calibrates being copied
+    for serial in serial_numbers:
+        candidates.append(serial + '.pCal')
+        candidates.append(serial + '.fCal')
+    for candidate in candidates:
+        print("Copying calibrate:   %s    ....    " % candidate, end='')
+        if candidate not in calibrates:
+            print("Missing")
+            continue
+        try:
+            shutil.copy(os.path.join(source, candidate), base)
+        except (OSError, IOError) as e:
+            print("Failure")
+            continue
+        print("Success")
+
+
 def make_derivative_callback(parser, *args, **kwargs):
     """
     make derivative packages
     """
-    if not args:
-        print("No serial number given, nothing done")
-        return
-
-    # Retrieve serial numbers given in command line
     serial_numbers = []
-    for arg in args:
-        if re.match(r'^\d{3,5}$', arg):
-            serial_numbers.append(arg)
-        elif re.match(r'\d{3,5}[-~:]\d{3,5}', arg):
-            references = re.split(r'[-~:]', arg)
-            if len(references[0]) != len(references[1]):
-                serial_numbers.append(references[0])
-                serial_numbers.append(references[1])
-            else:
-                start = min(int(references[0]), int(references[1]))
-                final = max(int(references[0]), int(references[1]))
-                for number in range(start, final+1):
-                    serial_numbers.append(str(number))
-    print(serial_numbers)
+    if args:
+        # Retrieve serial numbers given in command line
+        serial_numbers = utility.parse_serial_numbers(*args)
+        # Copy calibrates essential to specified location
+        utility.copy_calibrates(serial_numbers,
+                                os.path.join(parser.root, parser.calibrates),
+                                os.path.join(parser.root, parser.laboratory))
+        # Copy linearfits essential to specified location
+        utility.copy_linearfits(serial_numbers,
+                                os.path.join(parser.root, parser.linearfits),
+                                os.path.join(parser.root, parser.laboratory))
+        # Separating copy operation messages and make operation messages
+        print()
 
     # Dict to save file information
     made_derivative = {}
@@ -62,44 +113,87 @@ def make_derivative_callback(parser, *args, **kwargs):
     flow_calibrates = {}
     lfit_linearfits = {}
 
-    # Regular expression patterns to recognize filenames
-    pres_pattern = r'^(?P<serial_number>\d{4,5})[.]pCal$'
-    flow_pattern = r'^(?P<serial_number>\d{4,5})[.]fCal$'
-    lfit_pattern = r'^ZCF-301B\s+ST(?P<serial_number>\d{4,5})\w{4,}(?P<serial_volume>-?\w{0,3})[.]xls$'
-    derv_pattern = r'^ZCF-301B\s+ST\d{3,5}\(\d{4}[.]\d{2}[.]\d{2}\)-?\w{0,3}$'
-
     # Collect essential file information
-    for filename in os.listdir(path_calibrates):
-        match_result = re.match(pres_pattern, filename)
-        if match_result:
-            pres_calibrates.update({match_result.group('serial_number'): {'filename': filename}})
-    for filename in os.listdir(path_calibrates):
-        match_result = re.match(flow_pattern, filename)
-        if match_result:
-            flow_calibrates.update({match_result.group('serial_number'): {'filename': filename}})
-
-    for filename in os.listdir(path_linearfits):
-        match_result = re.match(lfit_pattern, filename)
-        if match_result:
-            lfit_linearfits.update({match_result.group('serial_number'): {
+    for filename in os.listdir(parser.laboratory):
+        solution = re.match(parser.pres_pattern, filename)
+        if solution:
+            pres_calibrates.update({solution.group('serial_number'): {'filename': filename}})
+            if not args and solution.group('serial_number') not in serial_numbers:
+                serial_numbers.append(solution.group('serial_number'))
+    for filename in os.listdir(parser.laboratory):
+        solution = re.match(parser.flow_pattern, filename)
+        if solution:
+            flow_calibrates.update({solution.group('serial_number'): {'filename': filename}})
+            if not args and solution.group('serial_number') not in serial_numbers:
+                serial_numbers.append(solution.group('serial_number'))
+    for filename in os.listdir(parser.laboratory):
+        solution = re.match(parser.lfit_pattern, filename)
+        if solution:
+            lfit_linearfits.update({solution.group('serial_number'): {
                 'filename': filename,
-                'volume': match_result.group('serial_volume')
+                'volume': solution.group('serial_volume')
             }})
+            if not args and solution.group('serial_number') not in serial_numbers:
+                serial_numbers.append(solution.group('serial_number'))
 
-    # Get names of derivative packages done
+    # Collecting derivatives related information
+    base = os.path.join(parser.root, parser.laboratory)
     timestamp = datetime.datetime.now().strftime('%Y.%m.%d')
     for serial in serial_numbers:
+        missing_message = []   # recording what are the missing files
         made_derivative.update({serial: {}})
         if serial in pres_calibrates:
             made_derivative[serial].update({'pres': pres_calibrates[serial]['filename']})
+        else:
+            missing_message.append("pres")
+
         if serial in flow_calibrates:
             made_derivative[serial].update({'flow': flow_calibrates[serial]['filename']})
+        else:
+            missing_message.append("flow")
+
         if serial in lfit_linearfits:
             made_derivative[serial].update({'lfit': lfit_linearfits[serial]['filename']})
+        else:
+            missing_message.append("lfit")
 
         if made_derivative[serial].__contains__('pres') and \
             made_derivative[serial].__contains__('flow') and \
             made_derivative[serial].__contains__('lfit'):
             derv = "ZCF-301B ST{serial}({timestamp}){volume}".format(serial=serial, timestamp=timestamp,
                                                                      volume=lfit_linearfits[serial]['volume'])
-            made_derivative[serial].update({'derv': derv})
+            made_derivative[serial].update({'status': True})
+        else:
+            derv = 'ZCF-301B ST{serial}({timestamp})'.format(serial=serial, timestamp=timestamp)
+            made_derivative[serial].update({'status': False})
+            error = 'Missing ' + ', '.join(missing_message)
+            made_derivative[serial].update({'error': error})
+
+        made_derivative[serial].update({'derv': derv})
+
+    # Starting making derivative
+    for serial in serial_numbers:
+        target = os.path.join(base, made_derivative[serial]['derv'])
+        # For beauty, just output part of the name of derivative of it's too long
+        print("Making derivative:  %s   ....    " % made_derivative[serial]['derv'][0:28], end='')
+
+        # If there are files missing, go to next
+        if not made_derivative[serial]['status']:
+            print(made_derivative[serial]['error'])
+            continue
+
+        # No files missing, begin making
+        try:
+            os.mkdir(target)
+        except OSError as e:
+            print("Failure")
+            continue
+        try:
+            shutil.move(os.path.join(base, made_derivative[serial]['pres']), target)
+            shutil.move(os.path.join(base, made_derivative[serial]['flow']), target)
+            shutil.move(os.path.join(base, made_derivative[serial]['lfit']), target)
+        except (IOError, OSError) as e:
+            print("Failure")
+            continue
+
+        print("Success")

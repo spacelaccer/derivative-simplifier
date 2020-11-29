@@ -1,5 +1,7 @@
 import abc
+import os
 import re
+import configparser
 from typing import Union, List, Optional
 
 
@@ -361,6 +363,26 @@ class CommandElementParser(CommandElementContainer):
 
     def __init__(self):
         super().__init__()
+        self.config = {}
+
+    # parse config file
+    def parse_config(self):
+        self.root = os.path.dirname(os.path.abspath(__file__))
+        config = os.path.join(self.root, 'config.cfg')
+
+        if not os.path.exists(config):
+            raise Exception("Fatal Error: config file (config.py) not found")
+        if not os.path.isfile(config):
+            raise Exception("Fatal Error: config.py found, but not regular file")
+
+        parser = configparser.ConfigParser()
+        parser.read(config)
+
+        for section in parser.sections():
+            for option in parser.options(section):
+                setattr(self, option, parser.get(section, option))
+                print("%s: %s" % (option, getattr(self, option)))
+                self.config.update({option: parser.get(section, option)})
 
     def get_max_command_length(self):
         return self.maximum_command_length
