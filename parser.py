@@ -376,7 +376,7 @@ class CommandElementParser(CommandElementContainer):
             raise Exception("Fatal Error: config.py found, but not regular file")
 
         parser = configparser.ConfigParser()
-        parser.read(config)
+        parser.read(config, encoding='utf-8')
 
         for section in parser.sections():
             for option in parser.options(section):
