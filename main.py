@@ -9,7 +9,7 @@ command_prompt = ">>> "
 if __name__ == '__main__':
 
     parser = CommandElementParser()
-    parser.parse_config()
+    parser.load_config()
     parser.append_element('exit',
                           callback=callback.exit_callback,
                           description='Just exit')
@@ -30,6 +30,10 @@ if __name__ == '__main__':
     parser.append_element('make-derivative', 'makeder', 'makedev', 'makedet',
                           callback=callback.make_derivative_callback,
                           description='Make derivative package')
+    parser.append_element('calbr-controller', 'calbrctrl',
+                          prototype={'sensors': 'str', 'operands': 'str', 'temperatures': 'str'},
+                          callback=callback.calbr_controller_callback,
+                          description='Modify calibrates')
     while True:
         command = input(command_prompt)
         parser.parse(command)

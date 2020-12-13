@@ -253,3 +253,65 @@ def make_derivative_callback(parser, *args, **kwargs):
             continue
 
         print("Success")
+
+
+def calbr_controller_callback(parser, *args, **kwargs):
+    """
+    modify calibrates with flaws
+    possible formats:
+
+    calbr-controller concat  20778,20779,20780
+    calbr-controller execute sensors=in,out,flow operands=11,22,33 temperatures=25,100,125  20780
+    calbr-controller deploy  20778, 20779, 20780
+    """
+    if not args:
+        print("Error: No operation(concat, execute, deploy) specified")
+        utility.calbr_controller_command_usage()
+        return
+
+    if args[0] == 'concat':   # concat calibrates
+        for arg in utility.parse_serial_numbers(*args[1:]):
+            pres = os.path.join(parser.root, parser.config['calibrates'], arg + '.pCal')
+            flow = os.path.join(parser.root, parser.config['calibrates'], arg + '.fCal')
+
+            dest = os.path.join(parser.root, parser.config['controllers'], parser.config['controllers.concat'])
+            utility.concat_calibrates(dest, pres, flow)
+        return
+
+    elif args[0] == 'execute':    # execute processing calibrates
+        if 'sensors' not in kwargs:
+            print("fatal error: sensors not given")
+            return
+        if 'operands' not in kwargs:
+            print("fatal error: operand not given")
+            return
+
+        possible_sensors = ['in', 'out', 'flow']
+        possible_tempers = ['25', '50', '75', '100', '125']
+        sensors = re.split(',', kwargs['sensors'].strip(','))
+        operands = re.split(',', kwargs['operands'].strip(','))
+        if 'temperatures' in kwargs:
+            temperatures = re.split(',', kwargs['temperatures'].strip(','))
+        else:
+            temperatures = possible_tempers
+
+    elif args[0] == 'deploy':     # deploy generated calibrates
+        serials = utility.parse_serial_numbers(*args[1:])
+        for arg in serials:
+            pres = os.path.join(parser.root, parser.config['controllers'], parser.config['controllers.deploy'],
+                                arg+'.pCal')
+            flow = os.path.join(parser.root, parser.config['controllers'], parser.config['controllers.deploy'],
+                                arg+'.fCal')
+            if not os.path.exists(pres):
+                print("Deploy calibrates: %s   ....    Failure (not exist)" % os.path.basename(pres))
+            if not os.path.exists(flow):
+                print("Deploy calibrates: %s   ....    Failure (not exist)" % os.path.basename(flow))
+
+            pres = os.path.join(parser.root, parser.config['calibrates'], arg+'.pCal')
+            flow = os.path.join(parser.root, parser.config['calibrates'], arg+'.fCal')
+            dest = os.path.join(parser.root, parser.config['controllers'], parser.config['controllers.offset'])
+
+    else:
+        print("Error: operation '%s' not defined" % args[0])
+        utility.calbr_controller_command_usage()
+        return

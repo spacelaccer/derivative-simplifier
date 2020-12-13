@@ -366,23 +366,55 @@ class CommandElementParser(CommandElementContainer):
         self.config = {}
 
     # parse config file
-    def parse_config(self):
+    def load_config(self):
         self.root = os.path.dirname(os.path.abspath(__file__))
         config = os.path.join(self.root, 'config.cfg')
+        parser = configparser.RawConfigParser()
 
-        if not os.path.exists(config):
-            raise Exception("Fatal Error: config file (config.py) not found")
-        if not os.path.isfile(config):
-            raise Exception("Fatal Error: config.py found, but not regular file")
+        if not os.path.exists(config) or not os.path.isfile(config):
+            print("config file not found, use defaults")
 
-        parser = configparser.ConfigParser()
+            parser.add_section('runtime path')
+            parser.set('runtime path', 'src_calibrates', '/home/spacer/document')
+            parser.set('runtime path', 'src_linearfits', '/home/spacer/document')
+
+            parser.add_section('directory structure')
+            parser.set('directory structure', 'calibrates', 'calibrates')
+            parser.set('directory structure', 'linearfits', 'linearfits')
+            parser.set('directory structure', 'derivatives', 'derivatives')
+            parser.set('directory structure', 'synthesizer', 'synthesizer')
+            parser.set('directory structure', 'controllers', 'controllers')
+            parser.set('directory structure', 'controllers.offset', 'offset-calibrates')
+            parser.set('directory structure', 'controllers.joined', 'joined-calibrates')
+            parser.set('directory structure', 'controllers.reborn', 'reborn-calibrates')
+
+            parser.add_section('regular patterns')
+            parser.set('regular patterns', 'cal_pattern', '\d{3,5}[.][p|f]Cal')
+            parser.set('regular patterns', 'lin_pattern', 'ZCF-301B\s+ST\d{3,5}\w{4,}-?\w{0,3}[.]xls')
+            parser.set('regular patterns', 'pres_pattern', '^(?P<serial_number>\d{4,5})[.]pCal$')
+            parser.set('regular patterns', 'flow_pattern', '^(?P<serial_number>\d{4,5})[.]fCal$')
+            parser.set('regular patterns', 'lfit_pattern', '^ZCF-301B\s+ST(?P<serial_number>\d{4,5})\w{4,}(?P<serial_volume>-?\w{0,3})[.]xls$')
+            parser.set('regular patterns', 'derv_pattern', '^ZCF-301B\s+ST\d{3,5}\(\d{4}[.]\d{2}[.]\d{2}\)-?\w{0,3}$')
+
+            with open(config, 'w') as writer:
+                parser.write(writer)
+
         parser.read(config, encoding='utf-8')
-
         for section in parser.sections():
             for option in parser.options(section):
                 setattr(self, option, parser.get(section, option))
-                print("%s: %s" % (option, getattr(self, option)))
+                #print("%s: %s" % (option, getattr(self, option)))
                 self.config.update({option: parser.get(section, option)})
+
+        # checking directories
+        for key, value in parser.items('directory structure'):
+            directory = os.path.join(self.root, '/'.join(key.split('.')[:-1]), value)
+            if os.path.exists(directory):
+                print("Checking directory: %s   ....    Success" % directory.replace(self.root, '').lstrip('/'))
+            else:
+                print("Checking directory: %s   ....    Failure" % directory.replace(self.root, '').lstrip('/'))
+                os.mkdir(directory)
+                print("Making directory: %s   ....    Success" % directory.replace(self.root, '').lstrip('/'))
 
     def get_max_command_length(self):
         return self.maximum_command_length

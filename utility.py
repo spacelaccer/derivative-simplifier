@@ -3,6 +3,52 @@ import re
 import shutil
 
 
+def calbr_controller_command_usage():
+    print("Usage: ")
+    print("       calbr-controller concat  serial-numbers")
+    print("       calbr-controller execute sensors=in,out operands=11,22,33 temperatures=125 serial-numbers")
+    print("       calbr-controller deploy  serial-numbers")
+
+
+def concat_calibrates(dest, pres, flow):
+    """
+    join two calibrates files together
+    """
+    if not os.path.exists(dest):
+        print("Concat calibrates: dest given not exist: %s" % os.path.basename(dest))
+        return False
+    if not os.path.isdir(dest):
+        print("Concat calibrates: dest given not a directory: %s" % os.path.basename(dest))
+        return False
+    if not os.path.exists(pres):
+        print("Concat calibrates: pres file not exist: %s" % os.path.basename(pres))
+        return False
+    if not os.path.isfile(pres):
+        print("Concat calibrates: pres file not regular: %s" % os.path.basename(pres))
+        return False
+    if not os.path.exists(flow):
+        print("Concat calibrates: flow file not exist: %s" % os.path.basename(flow))
+        return False
+    if not os.path.isfile(flow):
+        print("Concat calibrates: flow file not regular: %s" % os.path.basename(flow))
+        return False
+
+    target = os.path.basename(pres).replace('.p', '.')
+    print("Concat calibrates: %s   ....    " % target, end='')
+    with open(pres, 'r') as pres_reader, \
+            open(flow, 'r') as flow_reader, \
+            open(os.path.join(dest, target), 'w') as writer:
+        writer.write(pres_reader.read())
+        writer.write(flow_reader.read())
+
+    if os.path.getsize(os.path.join(dest, target)) == 0:
+        print("Failure")
+        return False
+
+    print("Success")
+    return True
+
+
 def parse_serial_numbers(*args):
     """
     parse command line input to get serial numbers wanted
